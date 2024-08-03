@@ -1,103 +1,114 @@
-local P = game:GetService("Players")
-local L = P.LocalPlayer
-local C = workspace.CurrentCamera
-local U = game:GetService("UserInputService")
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+local UserInputService = game:GetService("UserInputService")
 
-local o = false
-local t = nil
+local lockOn = false
+local targetPlayer = nil
 
-local function g()
-    local d = math.huge
-    local p = nil
+-- Function to detect and lock onto the closest player in front
+local function getClosestPlayer()
+    local closestDistance = math.huge
+    local closestPlayer = nil
 
-    for _, v in pairs(P:GetPlayers()) do
-        if v ~= L and v.Character and v.Character:FindFirstChild("HumanoidRootPart") then
-            local h = v.Character.HumanoidRootPart
-            local s, b = C:WorldToScreenPoint(h.Position)
-            if b then
-                local m = Vector2.new(C.ViewportSize.X / 2, C.ViewportSize.Y / 2)
-                local dis = (m - Vector2.new(s.X, s.Y)).magnitude
-                if dis < d then
-                    d = dis
-                    p = v
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            local character = player.Character
+            local humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
+            local screenPoint, onScreen = Camera:WorldToScreenPoint(humanoidRootPart.Position)
+            if onScreen then
+                local mousePos = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+                local distance = (mousePos - Vector2.new(screenPoint.X, screenPoint.Y)).magnitude
+                if distance < closestDistance then
+                    closestDistance = distance
+                    closestPlayer = player
                 end
             end
         end
     end
 
-    return p
+    return closestPlayer
 end
 
-local function l()
-    if o then
-        t = g()
+-- Function to lock onto the target player
+local function lockOnTarget()
+    if lockOn then
+        targetPlayer = getClosestPlayer()
     else
-        t = nil
+        targetPlayer = nil
     end
 end
 
-local function a()
-    if o and t and t.Character and t.Character:FindFirstChild("Head") then
-        local h = t.Character.Head
-        C.CFrame = CFrame.new(C.CFrame.Position, h.Position)
+-- Function to aim at the target player
+local function aimAtTarget()
+    if lockOn and targetPlayer and targetPlayer.Character and targetPlayer.Character:FindFirstChild("Head") then
+        local head = targetPlayer.Character.Head
+        Camera.CFrame = CFrame.new(Camera.CFrame.Position, head.Position)
     end
 end
 
-local S = Instance.new("ScreenGui")
-local B = Instance.new("TextButton")
+-- Create a GUI button to toggle lock-on
+local ScreenGui = Instance.new("ScreenGui")
+local Button = Instance.new("TextButton")
 
-S.Parent = game.CoreGui
-S.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+ScreenGui.Parent = game.CoreGui
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 
-B.Parent = S
-B.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-B.BackgroundTransparency = 0.5
-B.BorderColor3 = Color3.fromRGB(255, 255, 255)
-B.Position = UDim2.new(0, 100, 0, 100)
-B.Size = UDim2.new(0, 200, 0, 50)
-B.Font = Enum.Font.SourceSans
-B.Text = "Toggle Lock On"
-B.TextColor3 = Color3.fromRGB(255, 255, 255)
-B.TextSize = 24
+Button.Parent = ScreenGui
+Button.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+Button.BackgroundTransparency = 0.5
+Button.BorderColor3 = Color3.fromRGB(255, 255, 255)
+Button.Position = UDim2.new(0, 100, 0, 100)
+Button.Size = UDim2.new(0, 200, 0, 50)
+Button.Font = Enum.Font.SourceSans
+Button.Text = "Toggle Lock On"
+Button.TextColor3 = Color3.fromRGB(255, 255, 255)
+Button.TextSize = 24
 
-B.MouseButton1Click:Connect(function()
-    o = not o
-    l()
-    B.Text = o and "Unlock" or "Lock On"
+Button.MouseButton1Click:Connect(function()
+    lockOn = not lockOn
+    lockOnTarget()
+    if lockOn then
+        Button.Text = "Unlock"
+    else
+        Button.Text = "Lock On"
+    end
 end)
 
-local d = false
-local i, s, p
+-- Make the button draggable
+local dragging = false
+local dragInput, dragStart, startPos
 
-local function u(inp)
-    local delta = inp.Position - s
-    B.Position = UDim2.new(p.X.Scale, p.X.Offset + delta.X, p.Y.Scale, p.Y.Offset + delta.Y)
+local function update(input)
+    local delta = input.Position - dragStart
+    Button.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
 end
 
-B.InputBegan:Connect(function(inp)
-    if inp.UserInputType == Enum.UserInputType.MouseButton1 then
-        d = true
-        s = inp.Position
-        p = B.Position
+Button.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = true
+        dragStart = input.Position
+        startPos = Button.Position
 
-        inp.Changed:Connect(function()
-            if inp.UserInputState == Enum.UserInputState.End then
-                d = false
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+            dragging = false
             end
         end)
     end
 end)
 
-B.InputChanged:Connect(function(inp)
-    if inp.UserInputType == Enum.UserInputType.MouseMovement then
-        i = inp
+Button.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement then
+        dragInput = input
     end
 end)
 
-U.InputChanged:Connect(function(inp)
-    if inp == i and d then
-        u(inp)
+UserInputService.InputChanged:Connect(function(input)
+    if input == dragInput and dragging then
+        update(input)
     end
 end)
 
-game:GetService("RunService").RenderStepped:Connect(a)
+-- Connect the aiming function to the render step
+game:GetService("RunService").RenderStepped:Connect(aimAtTarget)
